@@ -22,9 +22,6 @@ export function AppShell() {
           {/* Logo */}
           <NavLink to="/" className="flex items-center gap-3">
             <span className="font-black tracking-tighter text-foreground">DIPLOMVERIFY</span>
-            <span className="hidden font-mono text-[9px] tracking-[0.2em] text-muted-foreground/40 uppercase sm:block">
-              — Team 1
-            </span>
           </NavLink>
 
           {/* Nav */}
@@ -52,23 +49,17 @@ export function AppShell() {
           <div className="flex items-center gap-3">
             {auth.status === 'authenticated' && auth.user && (
               <span className="hidden font-mono text-[9px] tracking-[0.14em] text-muted-foreground/40 uppercase sm:block">
-                {auth.user.subject}
+                {auth.user.organizationCode ?? auth.user.name}
               </span>
             )}
-            {auth.authEnabled ? (
-              auth.status === 'authenticated' ? (
-                <Button variant="ghost" size="sm" onClick={() => void auth.logout()}>
-                  Выйти
-                </Button>
-              ) : (
-                <Button size="sm" onClick={() => void auth.login()} disabled={auth.status === 'loading'}>
-                  Войти
-                </Button>
-              )
+            {auth.status === 'authenticated' ? (
+              <Button variant="ghost" size="sm" onClick={() => void auth.logout()}>
+                Выйти
+              </Button>
             ) : (
-              <span className="font-mono text-[9px] tracking-[0.14em] text-muted-foreground/30 uppercase">
-                dev mode
-              </span>
+              <Button asChild size="sm">
+                <NavLink to="/login">Войти</NavLink>
+              </Button>
             )}
           </div>
         </div>

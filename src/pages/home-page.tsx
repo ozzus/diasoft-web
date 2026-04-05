@@ -86,9 +86,9 @@ export function HomePage() {
               <ArrowRight size={14} />
             </Link>
           </Button>
-          {auth.authEnabled && auth.status !== 'authenticated' && (
-            <Button size="lg" variant="outline" onClick={() => void auth.login()}>
-              Войти в кабинет
+          {auth.status !== 'authenticated' && (
+            <Button asChild size="lg" variant="outline">
+              <Link to="/login">Войти в кабинет</Link>
             </Button>
           )}
         </motion.div>

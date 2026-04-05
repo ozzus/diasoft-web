@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/protected-route'
 import { AuthProvider } from '@/lib/auth'
 import { HomePage } from '@/pages/home-page'
 import { HrPage } from '@/pages/hr-page'
+import { LoginPage } from '@/pages/login-page'
 import { NotFoundPage } from '@/pages/not-found-page'
 import { PublicSharePage } from '@/pages/public-share-page'
 import { PublicVerifyPage } from '@/pages/public-verify-page'
@@ -19,10 +20,11 @@ export function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route
               path="/university"
               element={
-                <ProtectedRoute allowedRoles={['super_admin', 'university_admin', 'university_operator']}>
+                <ProtectedRoute allowedRoles={['university']}>
                   <UniversityPage />
                 </ProtectedRoute>
               }

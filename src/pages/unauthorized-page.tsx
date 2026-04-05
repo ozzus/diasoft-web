@@ -1,4 +1,5 @@
 import { ShieldAlert } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth'
 
@@ -20,9 +21,9 @@ export function UnauthorizedPage({ message }: Props) {
         {message ?? 'Для доступа к этому кабинету необходима ролевая сессия платформы.'}
       </p>
       <div className="flex gap-3">
-        {auth.authEnabled && (
-          <Button onClick={() => void auth.login()} disabled={auth.status === 'loading'}>
-            Войти через OIDC
+        {auth.status !== 'authenticated' && (
+          <Button asChild>
+            <Link to="/login">Перейти ко входу</Link>
           </Button>
         )}
         {auth.status === 'authenticated' && (

@@ -1,53 +1,65 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { QrCode, Share2, ShieldCheck, ExternalLink } from 'lucide-react'
+import { ExternalLink, Loader2, QrCode, Share2, ShieldCheck } from 'lucide-react'
 
 import { BackendStatusPanel } from '@/components/backend-status-panel'
 import { StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth'
-import { createStudentShareLink, listStudentDiplomas, type RegistryDiploma, type ShareLink } from '@/lib/api'
+import { createStudentShareLink, getStudentDiploma, revokeStudentShareLink, type ShareLink, type StudentDiploma } from '@/lib/api'
 
 const ease = [0.16, 1, 0.3, 1] as [number, number, number, number]
 
 export function StudentPage() {
   const auth = useAuth()
-  const [diplomas, setDiplomas]   = useState<RegistryDiploma[]>([])
+  const [diploma, setDiploma] = useState<StudentDiploma | null>(null)
   const [shareLink, setShareLink] = useState<ShareLink | null>(null)
-  const [error, setError]         = useState<string | null>(null)
-  const [loading, setLoading]     = useState(false)
-  const diploma = diplomas[0]
-  const studentExternalId = auth.user?.studentExternalId ?? ''
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [shareLoading, setShareLoading] = useState(false)
 
   useEffect(() => {
-    if (!studentExternalId) return
     setLoading(true)
     setError(null)
-    void listStudentDiplomas()
-      .then(setDiplomas)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Ошибка загрузки'))
+    void getStudentDiploma()
+      .then(setDiploma)
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Ошибка загрузки диплома'))
       .finally(() => setLoading(false))
-  }, [studentExternalId])
+  }, [])
 
   const verifyUrl = useMemo(() => {
     if (!diploma?.verificationToken) return null
-    return `/public/verify/${encodeURIComponent(diploma.verificationToken)}`
+    return `/v/${encodeURIComponent(diploma.verificationToken)}`
   }, [diploma])
 
-  async function handleShare() {
-    if (!diploma) return
+  async function handleShareCreate() {
+    setShareLoading(true)
     setError(null)
     try {
-      setShareLink(await createStudentShareLink(diploma.id))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка создания ссылки')
+      setShareLink(await createStudentShareLink())
+    } catch (shareError) {
+      setError(shareError instanceof Error ? shareError.message : 'Ошибка создания ссылки')
+    } finally {
+      setShareLoading(false)
+    }
+  }
+
+  async function handleShareRevoke() {
+    if (!shareLink) return
+    setShareLoading(true)
+    setError(null)
+    try {
+      await revokeStudentShareLink(shareLink.shareToken)
+      setShareLink(null)
+    } catch (shareError) {
+      setError(shareError instanceof Error ? shareError.message : 'Ошибка удаления ссылки')
+    } finally {
+      setShareLoading(false)
     }
   }
 
   return (
     <div className="flex flex-col gap-12">
-
-      {/* ── Header ──────────────────────────────────────────── */}
       <motion.div
         className="border-b border-border/30 pb-6"
         initial={{ opacity: 0, y: 12 }}
@@ -55,12 +67,10 @@ export function StudentPage() {
         transition={{ duration: 0.5, ease }}
       >
         <p className="mb-2 font-mono text-[9px] tracking-[0.2em] text-muted-foreground/40 uppercase">— Кабинет студента</p>
-        <h1 className="text-3xl font-black tracking-tight">МОЙ<br />ДИПЛОМ</h1>
+        <h1 className="text-3xl font-black tracking-tight">МОЙ ДИПЛОМ</h1>
       </motion.div>
 
       <div className="grid gap-8 lg:grid-cols-[340px_1fr_220px]">
-
-        {/* ── Diploma card ───────────────────────────────── */}
         <motion.div
           className="flex flex-col gap-0 bg-foreground text-background"
           initial={{ opacity: 0, y: 16 }}
@@ -71,36 +81,31 @@ export function StudentPage() {
             <p className="font-mono text-[9px] tracking-[0.2em] text-background/40 uppercase">— Документ</p>
           </div>
 
-          {/* QR area */}
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-5 py-10">
             <div className="flex h-36 w-36 items-center justify-center border border-background/10 bg-background/5">
               <QrCode size={80} strokeWidth={1.2} className="text-background/70" />
             </div>
             {loading && (
-              <p className="font-mono text-[9px] tracking-[0.2em] text-background/30 uppercase animate-pulse">
-                Загрузка...
-              </p>
+              <p className="font-mono text-[9px] tracking-[0.2em] text-background/30 uppercase animate-pulse">Загрузка...</p>
             )}
           </div>
 
-          {/* Diploma info */}
           {diploma && (
             <div className="border-t border-background/10 px-5 py-4 flex flex-col gap-1">
-              <p className="text-sm font-bold tracking-tight">{diploma.ownerNameMask}</p>
-              <p className="font-mono text-[10px] text-background/50">{diploma.programName}</p>
+              <p className="text-sm font-bold tracking-tight">{auth.user?.name ?? 'Студент'}</p>
+              <p className="font-mono text-[10px] text-background/50">{diploma.program}</p>
               <p className="font-mono text-[10px] text-background/40">{diploma.diplomaNumber}</p>
             </div>
           )}
 
-          {/* Actions */}
           <div className="grid grid-cols-2 border-t border-background/10">
             <button
               type="button"
-              onClick={() => void handleShare()}
-              disabled={!diploma}
+              onClick={() => void handleShareCreate()}
+              disabled={!diploma || shareLoading}
               className="flex items-center justify-center gap-2 border-r border-background/10 py-4 font-mono text-[9px] tracking-widest uppercase text-background/60 transition-colors hover:bg-background/5 hover:text-background disabled:opacity-30"
             >
-              <Share2 size={11} />
+              {shareLoading ? <Loader2 size={11} className="animate-spin" /> : <Share2 size={11} />}
               Share
             </button>
             <button
@@ -115,7 +120,6 @@ export function StudentPage() {
           </div>
         </motion.div>
 
-        {/* ── Details panel ──────────────────────────────── */}
         <motion.div
           className="flex flex-col gap-0 border border-border/40"
           initial={{ opacity: 0, y: 16 }}
@@ -130,37 +134,42 @@ export function StudentPage() {
             <InfoRow label="Статус">
               <StatusPill status={(diploma?.status ?? 'pending') as Parameters<typeof StatusPill>[0]['status']} />
             </InfoRow>
-            <InfoRow label="Владелец">
-              <span className="text-sm text-foreground">{diploma?.ownerNameMask ?? '—'}</span>
+            <InfoRow label="Номер диплома">
+              <span className="text-sm text-foreground">{diploma?.diplomaNumber ?? '—'}</span>
+            </InfoRow>
+            <InfoRow label="ВУЗ">
+              <span className="text-sm text-foreground">{diploma?.universityCode ?? '—'}</span>
             </InfoRow>
             <InfoRow label="Специальность">
-              <span className="text-sm text-foreground">{diploma?.programName ?? '—'}</span>
+              <span className="text-sm text-foreground">{diploma?.program ?? '—'}</span>
             </InfoRow>
-            <InfoRow label="Verification token">
-              <span className="font-mono text-[10px] text-muted-foreground/60 break-all">
-                {diploma?.verificationToken ?? '—'}
-              </span>
+            <InfoRow label="Год выпуска">
+              <span className="text-sm text-foreground">{diploma?.graduationYear ?? '—'}</span>
             </InfoRow>
-            <InfoRow label="External ID">
-              <span className="font-mono text-[10px] text-muted-foreground/60">
-                {studentExternalId || '—'}
-              </span>
+            <InfoRow label="Токен проверки">
+              <span className="font-mono text-[10px] text-muted-foreground/60 break-all">{diploma?.verificationToken ?? '—'}</span>
             </InfoRow>
           </div>
 
           {shareLink && (
-            <div className="border-t border-border/30 p-5 flex flex-col gap-2">
+            <div className="border-t border-border/30 p-5 flex flex-col gap-3">
               <p className="font-mono text-[9px] tracking-[0.2em] text-muted-foreground/40 uppercase">— Активная ссылка</p>
               <div className="flex items-start justify-between gap-2">
                 <p className="break-all font-mono text-[10px] text-muted-foreground/60">{shareLink.shareUrl}</p>
-                <a
-                  href={shareLink.shareUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-shrink-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                >
+                <a href={shareLink.shareUrl} target="_blank" rel="noreferrer" className="flex-shrink-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors">
                   <ExternalLink size={12} />
                 </a>
+              </div>
+              <div className="flex gap-2">
+                <Button asChild variant="outline" size="sm" className="flex-1">
+                  <a href={shareLink.shareUrl} target="_blank" rel="noreferrer">
+                    Открыть
+                    <ExternalLink size={10} />
+                  </a>
+                </Button>
+                <Button variant="ghost" size="sm" className="flex-1" onClick={() => void handleShareRevoke()} disabled={shareLoading}>
+                  Удалить
+                </Button>
               </div>
             </div>
           )}
@@ -175,7 +184,7 @@ export function StudentPage() {
             <div className="border-t border-border/30 p-5">
               <Button asChild variant="outline" size="sm" className="w-full">
                 <a href={verifyUrl}>
-                  Открыть страницу верификации
+                  Открыть страницу проверки
                   <ExternalLink size={10} />
                 </a>
               </Button>
@@ -183,12 +192,7 @@ export function StudentPage() {
           )}
         </motion.div>
 
-        {/* ── Backend status ──────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.25, ease }}
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.25, ease }}>
           <BackendStatusPanel />
         </motion.div>
       </div>

@@ -1,16 +1,9 @@
-import {
-  createContext,
-  type PropsWithChildren,
-  startTransition,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react'
+import { createContext, type PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react'
+import type { User } from 'oidc-client-ts'
 import { AuthProvider as OidcProvider, hasAuthParams, useAuth as useOidcAuth } from 'react-oidc-context'
-import { WebStorageStateStore, type User } from 'oidc-client-ts'
+import { WebStorageStateStore } from 'oidc-client-ts'
 
-import { getCurrentUser, setRegistryAccessToken, type CurrentUser } from '@/lib/api'
+import { getCurrentUser, login as loginRequest, setAccessToken, type CurrentUser, type LoginRequest } from '@/lib/api'
 import { readRuntimeConfig } from '@/lib/runtime-config'
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated'
@@ -20,11 +13,12 @@ type AuthContextValue = {
   status: AuthStatus
   user: CurrentUser | null
   error: string | null
-  login: () => Promise<void>
+  login: (credentials?: LoginRequest) => Promise<void>
   logout: () => Promise<void>
   hasAnyRole: (...roles: string[]) => boolean
 }
 
+const accessTokenStorageKey = 'diasoft-web.access-token'
 const returnUrlStorageKey = 'diasoft-web.return-url'
 const authEnabled = readRuntimeConfig('VITE_AUTH_ENABLED') === 'true'
 const authority = readRuntimeConfig('VITE_OIDC_AUTHORITY') ?? readRuntimeConfig('VITE_OIDC_ISSUER') ?? ''
@@ -57,7 +51,7 @@ const oidcConfig = {
 
 export function AuthProvider({ children }: PropsWithChildren) {
   if (!authEnabled) {
-    return <DevAuthProvider>{children}</DevAuthProvider>
+    return <PasswordAuthProvider>{children}</PasswordAuthProvider>
   }
 
   return (
@@ -67,7 +61,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   )
 }
 
-function DevAuthProvider({ children }: PropsWithChildren) {
+function PasswordAuthProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<AuthStatus>('loading')
   const [user, setUser] = useState<CurrentUser | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -77,22 +71,59 @@ function DevAuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   async function bootstrap() {
+    const token = window.localStorage.getItem(accessTokenStorageKey)
+    if (!token) {
+      setAccessToken(null)
+      setStatus('unauthenticated')
+      setUser(null)
+      setError(null)
+      return
+    }
+
+    setAccessToken(token)
     setStatus('loading')
     setError(null)
+
     try {
-      setRegistryAccessToken(null)
       const currentUser = await getCurrentUser()
-      startTransition(() => {
-        setUser(currentUser)
-        setStatus('authenticated')
-      })
+      setUser(currentUser)
+      setStatus('authenticated')
     } catch (bootstrapError) {
-      startTransition(() => {
-        setUser(null)
-        setStatus('unauthenticated')
-        setError(bootstrapError instanceof Error ? bootstrapError.message : 'Failed to initialize development identity')
-      })
+      clearStoredSession()
+      setUser(null)
+      setStatus('unauthenticated')
+      setError(bootstrapError instanceof Error ? bootstrapError.message : 'Не удалось восстановить сессию')
     }
+  }
+
+  async function login(credentials?: LoginRequest) {
+    if (!credentials) {
+      throw new Error('Требуются логин, пароль и роль')
+    }
+
+    setStatus('loading')
+    setError(null)
+
+    try {
+      const response = await loginRequest(credentials)
+      window.localStorage.setItem(accessTokenStorageKey, response.accessToken)
+      setAccessToken(response.accessToken)
+      setUser(response.user)
+      setStatus('authenticated')
+    } catch (loginError) {
+      clearStoredSession()
+      setUser(null)
+      setStatus('unauthenticated')
+      setError(loginError instanceof Error ? loginError.message : 'Ошибка авторизации')
+      throw loginError
+    }
+  }
+
+  async function logout() {
+    clearStoredSession()
+    setUser(null)
+    setStatus('unauthenticated')
+    setError(null)
   }
 
   const value = useMemo<AuthContextValue>(
@@ -101,11 +132,9 @@ function DevAuthProvider({ children }: PropsWithChildren) {
       status,
       user,
       error,
-      login: async () => {},
-      logout: async () => {
-        void bootstrap()
-      },
-      hasAnyRole: (...roles: string[]) => Boolean(user && roles.some((role) => user.roles.includes(role))),
+      login,
+      logout,
+      hasAnyRole: (...roles: string[]) => Boolean(user && roles.includes(user.role)),
     }),
     [error, status, user],
   )
@@ -126,7 +155,7 @@ function OidcSessionBridge({ children }: PropsWithChildren) {
     }
 
     if (oidc.error) {
-      setRegistryAccessToken(null)
+      setAccessToken(null)
       setUser(null)
       setStatus('unauthenticated')
       setError(oidc.error.message)
@@ -134,7 +163,7 @@ function OidcSessionBridge({ children }: PropsWithChildren) {
     }
 
     if (!oidc.isAuthenticated || !oidc.user?.access_token) {
-      setRegistryAccessToken(null)
+      setAccessToken(null)
       setUser(null)
       setError(null)
       if (!hasAuthParams()) {
@@ -143,24 +172,20 @@ function OidcSessionBridge({ children }: PropsWithChildren) {
       return
     }
 
-    setRegistryAccessToken(oidc.user.access_token)
+    setAccessToken(oidc.user.access_token)
     setStatus('loading')
     setError(null)
 
     void getCurrentUser()
       .then((currentUser) => {
-        startTransition(() => {
-          setUser(currentUser)
-          setStatus('authenticated')
-        })
+        setUser(currentUser)
+        setStatus('authenticated')
       })
       .catch((bootstrapError) => {
-        setRegistryAccessToken(null)
-        startTransition(() => {
-          setUser(null)
-          setStatus('unauthenticated')
-          setError(bootstrapError instanceof Error ? bootstrapError.message : 'Failed to bootstrap current user session')
-        })
+        setAccessToken(null)
+        setUser(null)
+        setStatus('unauthenticated')
+        setError(bootstrapError instanceof Error ? bootstrapError.message : 'Не удалось восстановить сессию')
       })
   }, [oidc.activeNavigator, oidc.error, oidc.isAuthenticated, oidc.isLoading, oidc.user?.access_token])
 
@@ -179,10 +204,10 @@ function OidcSessionBridge({ children }: PropsWithChildren) {
         })
       },
       logout: async () => {
-        setRegistryAccessToken(null)
+        setAccessToken(null)
         await oidc.signoutRedirect()
       },
-      hasAnyRole: (...roles: string[]) => Boolean(user && roles.some((role) => user.roles.includes(role))),
+      hasAnyRole: (...roles: string[]) => Boolean(user && roles.includes(user.role)),
     }),
     [error, oidc, status, user],
   )
@@ -203,4 +228,9 @@ function normalizeReturnUrl(value: string) {
     return '/'
   }
   return value
+}
+
+function clearStoredSession() {
+  window.localStorage.removeItem(accessTokenStorageKey)
+  setAccessToken(null)
 }
