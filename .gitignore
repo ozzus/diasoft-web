@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.idea/
+/docs/context.md
+/playwright-report/
+/test-results/
+/coverage/
