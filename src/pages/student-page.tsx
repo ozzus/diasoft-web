@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { ExternalLink, Loader2, QrCode, Share2, ShieldCheck } from 'lucide-react'
+import { ExternalLink, Loader2, Share2, ShieldCheck } from 'lucide-react'
+import QRCode from 'qrcode'
 
 import { BackendStatusPanel } from '@/components/backend-status-panel'
 import { StatusPill } from '@/components/status-pill'
@@ -14,6 +15,7 @@ export function StudentPage() {
   const auth = useAuth()
   const [diploma, setDiploma] = useState<StudentDiploma | null>(null)
   const [shareLink, setShareLink] = useState<ShareLink | null>(null)
+  const [qrCodeSrc, setQrCodeSrc] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [shareLoading, setShareLoading] = useState(false)
@@ -29,8 +31,26 @@ export function StudentPage() {
 
   const verifyUrl = useMemo(() => {
     if (!diploma?.verificationToken) return null
-    return `/v/${encodeURIComponent(diploma.verificationToken)}`
+    return `${window.location.origin}/v/${encodeURIComponent(diploma.verificationToken)}`
   }, [diploma])
+
+  useEffect(() => {
+    if (!verifyUrl) {
+      setQrCodeSrc(null)
+      return
+    }
+
+    void QRCode.toDataURL(verifyUrl, {
+      width: 320,
+      margin: 1,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff',
+      },
+    })
+      .then(setQrCodeSrc)
+      .catch(() => setQrCodeSrc(null))
+  }, [verifyUrl])
 
   async function handleShareCreate() {
     setShareLoading(true)
@@ -82,8 +102,14 @@ export function StudentPage() {
           </div>
 
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-5 py-10">
-            <div className="flex h-36 w-36 items-center justify-center border border-background/10 bg-background/5">
-              <QrCode size={80} strokeWidth={1.2} className="text-background/70" />
+            <div className="flex h-36 w-36 items-center justify-center border border-background/10 bg-white p-2">
+              {qrCodeSrc ? (
+                <img src={qrCodeSrc} alt="QR-код диплома" className="h-full w-full object-contain" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-background/5 text-background/40">
+                  <Loader2 size={22} className="animate-spin" />
+                </div>
+              )}
             </div>
             {loading && (
               <p className="font-mono text-[9px] tracking-[0.2em] text-background/30 uppercase animate-pulse">Загрузка...</p>

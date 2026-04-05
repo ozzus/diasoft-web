@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ const roles: Array<{ value: LoginRequest['role']; label: string; placeholder: st
 export function LoginPage() {
   const auth = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [role, setRole] = useState<LoginRequest['role']>('university')
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
@@ -23,6 +24,11 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
 
   const roleMeta = useMemo(() => roles.find((item) => item.value === role) ?? roles[0], [role])
+  const nextPath = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    const next = params.get('next')
+    return next && next.startsWith('/') ? next : null
+  }, [location.search])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -31,7 +37,8 @@ export function LoginPage() {
 
     try {
       await auth.login({ login, password, role })
-      if (role === 'university') navigate('/university')
+      if (nextPath) navigate(nextPath)
+      else if (role === 'university') navigate('/university')
       else if (role === 'student') navigate('/student')
       else navigate('/hr')
     } catch (submitError) {

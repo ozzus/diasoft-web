@@ -1,4 +1,5 @@
 import type { PropsWithChildren } from 'react'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 import { UnauthorizedPage } from '@/pages/unauthorized-page'
 
@@ -8,6 +9,7 @@ type ProtectedRouteProps = PropsWithChildren<{
 
 export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
   const auth = useAuth()
+  const location = useLocation()
 
   if (auth.status === 'loading') {
     return (
@@ -20,7 +22,8 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
   }
 
   if (auth.status !== 'authenticated') {
-    return <UnauthorizedPage message={auth.error ?? 'Для доступа к кабинету необходима аутентификация.'} />
+    const next = encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)
+    return <Navigate to={`/login?next=${next}`} replace />
   }
 
   if (!auth.hasAnyRole(...allowedRoles)) {

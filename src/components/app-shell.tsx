@@ -5,14 +5,25 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { to: '/',           label: 'Главная',  end: true },
-  { to: '/university', label: 'ВУЗ' },
-  { to: '/student',    label: 'Студент' },
-  { to: '/hr',         label: 'HR' },
+  { to: '/', label: 'Главная', end: true, public: true },
+  { to: '/university', label: 'ВУЗ', roles: ['university'] },
+  { to: '/student', label: 'Студент', roles: ['student'] },
+  { to: '/hr', label: 'HR', public: true },
 ]
 
 export function AppShell() {
   const auth = useAuth()
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.public) {
+      return true
+    }
+
+    if (auth.status !== 'authenticated' || !auth.user) {
+      return false
+    }
+
+    return item.roles?.includes(auth.user.role)
+  })
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -26,7 +37,7 @@ export function AppShell() {
 
           {/* Nav */}
           <nav className="flex items-center gap-0">
-            {navItems.map(({ to, label, end }) => (
+            {visibleNavItems.map(({ to, label, end }) => (
               <NavLink
                 key={to}
                 to={to}
